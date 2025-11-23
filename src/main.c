@@ -1,13 +1,34 @@
 #include "stm32f100xb.h"
 #include "stdint.h"
+#include "string.h"
 
 void RCC_Configuration(void);
 void GPIO_Configuration(void);
 void Delay(uint32_t nCount);
+void USART_Configuration(void);
 
 int main(void) {
     RCC_Configuration();
     GPIO_Configuration();
+    USART_Configuration();
+
+    char message[50];
+
+    strcpy(message, "this");
+    strcat(message, " is so cool. 42\n");
+
+    while (1)
+    {
+        uint8_t len = strlen(message);
+
+        for (uint8_t i = 0; i < len; i++) {
+            while (!(USART1->SR & (1 << 7))) {} // Waiting until the transmit register is empty
+
+            USART1->DR = message[i]; // Put message into the data register. USART1 sends it automatically
+            Delay(100);
+        }
+
+    }
 
 }
 
@@ -16,16 +37,14 @@ void GPIO_Configuration(void) {
     // Enable clocku do portu A, B, C, D
     RCC->APB2ENR |= (1 << 2) | (1 << 3) | (1 << 4) | (1 << 5);
 
-    // PC6 - DIN neopixel LED
-    GPIOC->CRL &= ~(0xF << 24);
-    GPIOC->CRL |= (0b11 << 24);  // output 50MHz
-    GPIOC->CRL |= (0b10 << 26);  // PP - alternate function
-    // PC8 - Prvni LED na desce
-    GPIOC->CRH &= ~(0xF << 0);
-    GPIOC->CRH |= (0b11 << 0);  // output 50MHz
-    // PC9 - Druha LED na desce
-    GPIOC->CRH &= ~(0xF << 4);
-    GPIOC->CRH |= (0b11 << 4);  // output 50MHz
+    // PA9 - USART1 TX
+    GPIOA->CRH &= ~(0xF << 4);
+    GPIOA->CRH |= (0b11 << 4);  // output 50MHz
+    GPIOA->CRH |= (0b10 << 6);  // PP - alternate function
+    // PA9 - USART1 TX
+    GPIOA->CRH &= ~(0xF << 8);
+    GPIOA->CRH |= (0b11 << 8);  // output 50MHz
+    GPIOA->CRH |= (0b10 << 10);  // PP - alternate function
 }
 
 // Basic clock configuration
@@ -69,4 +88,28 @@ void Delay(uint32_t nCount)
     for (volatile uint32_t i = 0; nCount != 0; nCount--) {
         for (i = 2000; i != 0; i--);
     }
+}
+
+void USART_Configuration(void) {
+    // Clock enable to USART1 and alternate functions
+    RCC->APB2ENR |= (1 << 0); // Alternate functions
+    RCC->APB2ENR |= (1 << 14); // USART1 
+
+    // No remap so USART1 lives at: TX = PA9, RX = PA10
+    AFIO->MAPR &= ~(1 << 2);
+    // // Remapping so USART1 lives at: TX = PB6, RX = PB7
+    // AFIO->MAPR |= (1 << 2);
+
+    // Baud rate setting: 24MHz/100000 = 240
+    USART1->BRR = 240;
+
+    // Enable transmitter and receiver
+    USART1->CR1 |= (1 << 2); // TX
+    USART1->CR1 |= (1 << 3); // RX
+
+    // Set stop bits to: 1 stop bit
+    USART1->CR2 &= ~(0b11 << 12);
+
+    // Enable USART1
+    USART1->CR1 |= (1 << 13);
 }
